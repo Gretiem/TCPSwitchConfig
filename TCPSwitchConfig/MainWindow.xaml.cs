@@ -376,7 +376,34 @@ namespace TCPSwitchConfig
             int space = test.IndexOf(" ");
             string next = test.Substring(space);
             MessageBox.Show(next);
+
+
+            /*
+            //Possible solution
+            Console.WriteLine(strComdindSample.Contains(".conf"));
+            Console.WriteLine(strComdindSample.IndexOf(".conf"));
             
+            string[] separators = { " " };
+            //string[] separators = { ",", ".", "!", "?", ";", ":", " " };
+            string[] words = strComdindSample.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+            int bytesline = 0;
+            foreach (var word in words)
+            {
+                //Console.WriteLine(word);
+                if (word.Contains(".conf") || word.Contains(".dat"))
+                {
+                    Console.WriteLine("Captured content: " + word);
+                    int y = bytesline - 6;
+                    Console.WriteLine(words[y]);
+                    
+                }
+                bytesline++;
+                
+            }
+
+
+             
+             */
 
 
 
@@ -444,7 +471,7 @@ namespace TCPSwitchConfig
                     netStream.Read(bytes, 0, 10000);
                     output = Encoding.UTF8.GetString(bytes);
                     //MessageBox.Show(Encoding.UTF8.GetString(bytes));
-
+                    
                     tcpClient.Close();
                     netStream.Close();
                 }
