@@ -1,0 +1,50 @@
+﻿<Window x:Class="TCPSwitchConfig.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:TCPSwitchConfig"
+        mc:Ignorable="d"
+        Title="MainWindow" Height="450" Width="800">
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition/>
+            <ColumnDefinition/>
+            <ColumnDefinition/>
+            <ColumnDefinition/>
+            <ColumnDefinition/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+            <RowDefinition/>
+            <RowDefinition/>
+            <RowDefinition/>
+            <RowDefinition/>
+        </Grid.RowDefinitions>
+
+        <Button x:Name="btnStaticConnection" Content="StaticConnection" Click="btnStaticConnection_Click"/>
+
+        <StackPanel Grid.Row="0" Grid.Column="1">
+            <Label Content="Some Dynamic" HorizontalAlignment="Center"/>
+            <Button x:Name="btnConnect" Content="Connect" Click="btnConnect_Click"/>
+            <Button x:Name="btnCommand1" Content="Command 1" Click="btnCommand1_Click"/>
+            <Button x:Name="btnCommand2" Content="Command 2" Click="btnCommand2_Click"/>
+            <Button x:Name="btnDisconnect" Content="Disconnect" Click="btnDisconnect_Click"/>
+        </StackPanel>
+        <TextBox x:Name="tbOutPut" Grid.Column="2" Grid.Row="0" Grid.ColumnSpan="3" Grid.RowSpan="3"/>
+
+        <Grid Grid.Column="0" Grid.Row="1" >
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition/>
+                <ColumnDefinition/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0">
+                <Button Content="Make File" Click="btnMakeFile_Click"/>
+                <Button Content="Remove File" Click="btnRemoveFile_Click"/>
+                <Button Content="Check File" Click="btnCheckFile_Click"/>
+            </StackPanel>
+            <StackPanel Grid.Column="1">
+                <Button />
+            </StackPanel>
+        </Grid>
+    </Grid>
+</Window>
