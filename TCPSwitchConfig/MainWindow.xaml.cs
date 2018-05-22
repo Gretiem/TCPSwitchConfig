@@ -380,25 +380,81 @@ namespace TCPSwitchConfig
 
             /*
             //Possible solution
-            Console.WriteLine(strComdindSample.Contains(".conf"));
-            Console.WriteLine(strComdindSample.IndexOf(".conf"));
-            
             string[] separators = { " " };
             //string[] separators = { ",", ".", "!", "?", ";", ":", " " };
-            string[] words = strComdindSample.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+            string[] tempArray = strComdindSample.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+            string[] words = strComdindSample.Split(separators, StringSplitOptions.RemoveEmptyEntries); ;
             int bytesline = 0;
+
+            string strFileNameVlan = "vlan.dat";
+            string strFileNamePackages = "packages.conf";
+            int intFileSizeVlan = 2356;
+            int intFileSizePackages = 1236;
+
+
             foreach (var word in words)
             {
+                string x = word.Replace("\n", "");
                 //Console.WriteLine(word);
+                
+
                 if (word.Contains(".conf") || word.Contains(".dat"))
                 {
-                    Console.WriteLine("Captured content: " + word);
-                    int y = bytesline - 6;
-                    Console.WriteLine(words[y]);
-                    
+                    string strCheckFilePackages = word.Replace(Environment.NewLine, "");
+                    string strCheckFileVlan = word.Replace(Environment.NewLine, "");
+                    int intIndexPositionOfBytes = 0;
+
+
+                    if (strCheckFilePackages == strFileNamePackages)
+                    {
+                        Console.WriteLine("Matching File Located");
+
+                        intIndexPositionOfBytes = bytesline - 6;
+                        int intCurrentFileBytes = Convert.ToInt32(words[intIndexPositionOfBytes]);
+
+                        if (intCurrentFileBytes == intFileSizePackages)
+                        {
+                            Console.WriteLine("File size matches what it needs to.");
+                        }
+                        else
+                        {
+                            Console.WriteLine("File incorrect size.");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("No Matching File Located"); ;
+                    }
+
+                    if (strCheckFileVlan == strFileNameVlan)
+                    {
+                        Console.WriteLine("Matching File Located");
+
+                        intIndexPositionOfBytes = bytesline - 6;
+                        int intCurrentFileBytes = Convert.ToInt32(words[intIndexPositionOfBytes]);
+
+                        if (intCurrentFileBytes == intFileSizeVlan)
+                        {
+                            Console.WriteLine("File size matches what it needs to.");
+                        }
+                        else
+                        {
+                            Console.WriteLine("File incorrect size.");
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine("No Matching File Located"); ;
+                    }
+
+
+                    Console.WriteLine("File: " + word + "Bytes: " + words[intIndexPositionOfBytes] + Environment.NewLine);
+
                 }
+                
                 bytesline++;
                 
+            }
             }
 
 
