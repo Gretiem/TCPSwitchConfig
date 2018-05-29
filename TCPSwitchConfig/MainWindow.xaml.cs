@@ -15,7 +15,7 @@ using System.Windows.Shapes;
 using System.Net.Sockets;
 using System.Net.NetworkInformation;
 using System.Text.RegularExpressions;
-
+using System.IO;
 
 namespace TCPSwitchConfig
 {
@@ -36,7 +36,21 @@ namespace TCPSwitchConfig
         public string strCommandMakeFile = "copy flash:vlan.dat flash:test.dat\r\n\r\n";
         public string strRemoveFile = "delete /f /r flash:test.dat\r\n\r\n";
         public string strCheckFile = "sh flash:\r\n";
+        public string strCommandGetSoftwareVersion = "sh ver | i Soft\r\n";
         public int intTelnetPort = 23;
+
+        public string strFactoryRouterIOSBin = "isr4400-universalk9.03.16.04b.S.155-3.S4b-ext.SPA.bin";
+        public string strFactorySwitchIOSBin = "cat3k_caa-universalk9.16.03.05b.SPA.bin";
+        public int intFactoryRouterIOSBytes = 491266116;
+        public int intFactorySwitchIOSBytes = 539623424;
+
+        public string strProjectRouterIOSBin = "isr4400-universalk9.03.16.06.S.155-3.S6-ext.SPA.bin";
+        public string strProjectSwitchIOSBin = "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin";
+        public int intProjectRouterIOSBytes = 494560068;
+        public int intProjectSwitchIOSBytes = 303772864;
+
+        
+
         #endregion End Variable
 
 
@@ -80,6 +94,17 @@ namespace TCPSwitchConfig
         private void btnCheckFile_Click(object sender, RoutedEventArgs e)
         {
             CheckFile();
+        }
+
+        private void btnBCSCheckFile_Click(object sender, RoutedEventArgs e)
+        {
+            BCSCheckFlash(tbBCSIpAddress.Text);
+        }
+
+        private void btnBCSConfigTest_Click(object sender, RoutedEventArgs e)
+        {
+            //DownloadCorrectIOS("192.168.144.4");
+            ConfigureDevice("192.168.144.4", "3650", "s-upc-3.s02020.us");
         }
 
         #endregion End EventHandler
@@ -468,6 +493,98 @@ namespace TCPSwitchConfig
             tbOutPut.Text = output;
         }
 
+        #region New BCS Async Code
+
+        private async void ConfigureDevice(string IpAddress, string Model, string RunningConfig)
+        {
+            string strIpAddress = IpAddress;
+            string strModel = Model;
+            string strRunningConfig = RunningConfig;
+            bool correctIOSInstalled = false;
+
+            string strFileName = "";
+            int intFileSize = 0;
+
+            if (strModel == "4451")
+            {
+
+            }
+            else if (strModel == "3850")
+            {
+                strFileName = "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin";
+                intFileSize = 303772864;
+            }
+            else if (strModel == "3650")
+            {
+                strFileName = "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin";
+                intFileSize = 303772864;
+
+                await Task.Run(async () =>
+                {
+                    correctIOSInstalled = await IOS3650Switch(strIpAddress);
+                });
+                //ping - check
+                //check soft first
+                //delete old flash
+                //verify deleted
+                //download new IOS
+                //verify download
+                //verify install
+
+
+            }
+            else
+            {
+                MessageBox.Show("Something didn't work right");
+            }
+
+            MessageBox.Show("switch method done, IOS configured correctly:" + correctIOSInstalled.ToString());
+            
+        }
+
+        private async Task<bool> IOS3650Switch(string IpAddress)
+        {
+            string strIpAddress = IpAddress;
+            bool pingable = false;
+            bool correctIOSInstalled = false;
+            string output = "";
+
+            await Task.Run(async () =>
+            {
+                pingable = await pingDevice(strIpAddress);
+            });
+
+            if(pingable)
+            {                
+                //Sends switch command to check for current software version
+                await Task.Run(async () =>
+                {
+                    output = await BCSCheckCurrentSwitchFlash(strIpAddress);
+                });
+
+                //if loop to check if output from BCSCheckCurrentFlash matches the correct IOS
+                if (output == "03.06.06E")
+                {
+                    MessageBox.Show("confirmed version match");
+                    correctIOSInstalled = true;
+                    return correctIOSInstalled;
+                }
+                else
+                {
+                    //Insert method to redo flash
+                }
+
+                MessageBox.Show(output);
+            }
+            else
+            {
+                MessageBox.Show("Pingable:" + pingable.ToString());
+            }
+
+            // Will tell parent method if true or false
+            return correctIOSInstalled;
+        }
+
         private async Task<bool> pingDevice(string ipAddress)
         {
             bool pingable = false;
@@ -475,7 +592,7 @@ namespace TCPSwitchConfig
 
             int i = 0;
             while (!pingable && i <= 5)
-            {                
+            {
                 try
                 {
                     PingReply reply = ping.Send(ipAddress);
@@ -483,7 +600,7 @@ namespace TCPSwitchConfig
                 }
                 catch
                 {
-                    
+
                 }
                 i++;
             }
@@ -491,6 +608,373 @@ namespace TCPSwitchConfig
             return pingable;
         }
 
+        private async Task<string> BCSCheckCurrentSwitchFlash(string IpAddress)
+        {
+            string strTargetIP = IpAddress;
+            string output = "";
+
+            await Task.Run(async () =>
+            {
+                output = await SendCommand(strTargetIP, strCommandGetSoftwareVersion);
+            });
+
+            string[] separators = { " " };
+            string[] words = output.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+            int bytesline = 0;
+            
+
+            //IOS Bin for each file
+            //sh ver | i soft - get the flash version
+            //sh flash: - learn if packages.conf or .bin
+
+
+
+
+
+            foreach (var word in words)
+            {
+
+                if (word.Contains("Version"))
+                {
+                    string strPossibleMatch = word.Replace(Environment.NewLine, "");
+                    int intIndexPositionOfTargetInArrary = 0;
+
+                    if (strPossibleMatch == "Version")
+                    {
+                        //MessageBox.Show("Matching String Located");
+                        intIndexPositionOfTargetInArrary = bytesline + 1;
+                        output = words[intIndexPositionOfTargetInArrary];
+                        //MessageBox.Show(words[intIndexPositionOfTargetInArrary]);
+
+                    }
+                    else
+                    {
+                        //MessageBox.Show("No Matching File Located");
+                    }
+                }
+                bytesline++;
+
+            }
+            return output;
+            
+        }
+
+        #endregion New BCS Async Code
+
+        private async void BCSCheckFile(string IpAddress, string SearchParam)
+        {
+            string strTargetIP = IpAddress;
+            string output = "";
+
+            await Task.Run(async () =>
+            {
+                output = await SendCommand(strTargetIP, strCheckFile);
+            });
+
+            string[] separators = { " " };
+            //string[] separators = { ",", ".", "!", "?", ";", ":", " " };
+            
+            string[] words = output.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+            int bytesline = 0;
+
+            string strFileNameVlan = "vlan.dat";
+            string strFileNamePackages = "packages.conf";
+            int intFileSizeVlan = 2356;
+            int intFileSizePackages = 1236;
+
+
+            foreach (var word in words)
+            {
+                string x = word.Replace("\n", "");
+                //Console.WriteLine(word);
+
+
+                if (word.Contains(".conf") || word.Contains(".dat"))
+                {
+                    string strCheckFilePackages = word.Replace(Environment.NewLine, "");
+                    string strCheckFileVlan = word.Replace(Environment.NewLine, "");
+                    int intIndexPositionOfBytes = 0;
+
+
+                    if (strCheckFilePackages == strFileNamePackages)
+                    {
+                        MessageBox.Show("Matching File Located");
+
+                        intIndexPositionOfBytes = bytesline - 6;
+                        int intCurrentFileBytes = Convert.ToInt32(words[intIndexPositionOfBytes]);
+
+                        if (intCurrentFileBytes == intFileSizePackages)
+                        {
+                            MessageBox.Show("File size matches what it needs to.");
+                        }
+                        else
+                        {
+                            MessageBox.Show("File incorrect size.");
+                        }
+                    }
+                    else
+                    {
+                        MessageBox.Show("No Matching File Located"); ;
+                    }
+
+                    if (strCheckFileVlan == strFileNameVlan)
+                    {
+                        MessageBox.Show("Matching File Located");
+
+                        intIndexPositionOfBytes = bytesline - 6;
+                        int intCurrentFileBytes = Convert.ToInt32(words[intIndexPositionOfBytes]);
+
+                        if (intCurrentFileBytes == intFileSizeVlan)
+                        {
+                            MessageBox.Show("File size matches what it needs to.");
+                        }
+                        else
+                        {
+                            MessageBox.Show("File incorrect size.");
+                        }
+                    }
+                    else
+                    {
+                        MessageBox.Show("No Matching File Located"); ;
+                    }
+
+
+                    MessageBox.Show("File: " + word + "Bytes: " + words[intIndexPositionOfBytes] + Environment.NewLine);
+
+                }
+
+                bytesline++;
+
+            }
+
+            tbOutPut.Text = string.Empty;
+            tbOutPut.Text = output;
+
+        }
+
+        private async void BCSCheckFlash(string IpAddress)
+        {
+            string strTargetIP = IpAddress;
+            string output = "";
+
+            await Task.Run(async () =>
+            {
+                output = await SendCommand(strTargetIP, strCommandGetSoftwareVersion);
+            });
+
+            string[] separators = { " " };
+            string[] words = output.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+            int bytesline = 0;
+
+            //IOS Bin for each file
+            //sh ver | i soft - get the flash version
+            //sh flash: - learn if packages.conf or .bin
+
+
+           
+
+
+            foreach (var word in words)
+            {
+                
+                if (word.Contains("Version"))
+                {
+                    string strPossibleMatch = word.Replace(Environment.NewLine, "");                    
+                    int intIndexPositionOfTargetInArrary = 0;
+
+                    if (strPossibleMatch == "Version")
+                    {
+                        MessageBox.Show("Matching String Located");      
+                        intIndexPositionOfTargetInArrary = bytesline + 1;
+                        MessageBox.Show(words[intIndexPositionOfTargetInArrary]);                         
+                       
+                    }
+                    else
+                    {
+                        MessageBox.Show("No Matching File Located"); ;
+                    }
+                }          
+                bytesline++;
+
+            }
+            
+            tbOutPut.Text = string.Empty;
+            tbOutPut.Text = output;
+        }       
+
+        private async Task<bool> GetDownloadStatus(string ipAddress, string fileName, int bytesize)
+        {
+            bool IsDownloadComplete = false;
+
+
+            string strTargetIP = "192.168.144.4";
+            string output = "";
+            string TargetFileName = fileName;
+            int TargetByteSize = bytesize;
+
+
+            await Task.Run(async () =>
+            {
+                output = await SendCommand(strTargetIP, strCheckFile);
+            });
+
+            string[] separators = { " ", "\n", "\r" };
+            //string[] separators = { ",", ".", "!", "?", ";", ":", " " };
+            
+            string[] words = output.Split(separators, StringSplitOptions.RemoveEmptyEntries); 
+            int bytesline = 0;
+
+            
+            
+
+
+            foreach (var word in words)
+            {
+                //string x = word.Replace("\n", "");
+                //Console.WriteLine(word);
+                
+
+
+                if (word.Contains("cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin"))
+                {
+                    //string strCheckFilePackages = word.Replace(Environment.NewLine, "");
+
+                    //string strCheckFilePackages = word.Replace(Environment.NewLine, "");
+                    string strCheckFilePackages = word;
+                    int intIndexPositionOfBytes = 0;
+
+                   //MessageBox.Show(strCheckFilePackages);
+
+                    if (strCheckFilePackages == TargetFileName)
+                    {
+                        
+
+                        intIndexPositionOfBytes = bytesline - 6;
+                        int intCurrentFileBytes = Convert.ToInt32(words[intIndexPositionOfBytes]);
+                        //MessageBox.Show(intCurrentFileBytes.ToString());
+                        if (intCurrentFileBytes == TargetByteSize)
+                        {
+                            IsDownloadComplete = true;
+                            MessageBox.Show("file downloaded");
+                        }
+                        else
+                        {
+
+                        }
+                    }
+                    else
+                    {
+                        MessageBox.Show("No Matching File Located"); ;
+                    }  
+                }
+                bytesline++;
+
+            }
+
+
+
+
+
+
+            return IsDownloadComplete;
+        }
+
+        private async void DownloadCorrectIOS(string ipAddress)
+        {
+            bool pingable = false;
+            string strTargetIP = ipAddress;
+            
+            string output = "";
+
+
+            await Task.Run(async () =>
+            {
+                pingable = await pingDevice(strTargetIP);
+            });
+
+            if (pingable)
+            {
+                try
+                {
+
+                   
+
+                    
+                    byte[] bytes;
+                    NetworkStream netStream;
+                    TcpClient tcpClient;
+                    Byte[] sendBytes;
+
+                    tcpClient = new TcpClient();
+                    tcpClient.Connect(strTargetIP, intTelnetPort);
+                    netStream = tcpClient.GetStream();
+                    //string command = "config t\r\nint fa0/1\r\ndescription Test Port\r\nend\r\nsh int fa0/1 status\r\n";
+
+                    //need
+                    //timeout, while loop, 
+                    bool bolDownloading = false;
+                    int intDownloadTimeOut = 0;
+
+                    //string strCmd = "copy flash:cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin flash:bat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin \r\n\r\n";
+                    string strCmd = "copy tftp://192.168.144.253/Public/IOS/cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin flash: \r\n\r\n";
+                    sendBytes = Encoding.UTF8.GetBytes(strCommandLogin + strCmd);
+                    netStream.Write(sendBytes, 0, sendBytes.Length);
+                    bytes = new byte[10000];
+
+                    
+
+
+                    /*
+                    string[] separators = { " ", ")" };
+                    string[] words = output.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+                    int len = words.Length;
+                    MessageBox.Show(words[len -1].ToString());
+                    */
+
+                    //netStream.Read(bytes, 0, 10000);                        
+                    //output = Encoding.UTF8.GetString(bytes);
+                    
+
+                    Boolean IsaySO = false;
+
+                    while(!IsaySO)
+                    { 
+                        System.Threading.Thread.Sleep(10000);
+
+                        await Task.Run(async () =>
+                        {
+                            IsaySO = await GetDownloadStatus(strTargetIP, "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin", 303772864);
+                        });
+                    }
+
+                    if (IsaySO)
+                    {
+                        tcpClient.Close();
+                        netStream.Close();
+                    }
+                    
+                    
+                    
+
+                }
+                catch
+                {
+
+                }
+
+            }
+            else
+            {
+                MessageBox.Show("Connection Failed");
+                output = "Connection Failed";
+            }
+
+
+            tbOutPut.Text = string.Empty;
+            tbOutPut.Text = output;
+
+        }
+        
         private async Task<string> SendCommand(string ipAddress, string command)
         {
             bool pingable = false;
@@ -518,7 +1002,6 @@ namespace TCPSwitchConfig
                     netStream = tcpClient.GetStream();
 
                     //string command = "config t\r\nint fa0/1\r\ndescription Test Port\r\nend\r\nsh int fa0/1 status\r\n";
-
 
                     sendBytes = Encoding.UTF8.GetBytes(strCommandLogin + strCommand);
                     netStream.Write(sendBytes, 0, sendBytes.Length);

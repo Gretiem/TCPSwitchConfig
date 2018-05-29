@@ -46,5 +46,11 @@
                 <Button />
             </StackPanel>
         </Grid>
+
+        <StackPanel Grid.Column="0" Grid.Row="2">
+            <TextBox x:Name="tbBCSIpAddress" />
+            <Button x:Name="btnBCSCheckFile" Content="BCS Check File" Click="btnBCSCheckFile_Click"/>
+            <Button x:Name="btnBCSConfigTest" Content="BCS Config test" Click="btnBCSConfigTest_Click"/>
+        </StackPanel>
     </Grid>
 </Window>
