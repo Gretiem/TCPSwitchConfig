@@ -743,7 +743,6 @@ namespace TCPSwitchConfig
             });
 
             string[] separators = { " ", "\n", "\r" };
-            //string[] separators = { ",", ".", "!", "?", ";", ":", " " };
 
             string[] words = output.Split(separators, StringSplitOptions.RemoveEmptyEntries);
             int bytesline = 0;
@@ -753,26 +752,15 @@ namespace TCPSwitchConfig
 
 
             foreach (var word in words)
-            {
-                //string x = word.Replace("\n", "");
-                //Console.WriteLine(word);
-
-
-
+            {                
                 if (word.Contains("cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin"))
-                {
-                    //string strCheckFilePackages = word.Replace(Environment.NewLine, "");
-
-                    //string strCheckFilePackages = word.Replace(Environment.NewLine, "");
+                {                    
                     string strCheckFilePackages = word;
                     int intIndexPositionOfBytes = 0;
-
                     //MessageBox.Show(strCheckFilePackages);
 
                     if (strCheckFilePackages == TargetFileName)
                     {
-
-
                         intIndexPositionOfBytes = bytesline - 6;
                         int intCurrentFileBytes = Convert.ToInt32(words[intIndexPositionOfBytes]);
                         //MessageBox.Show(intCurrentFileBytes.ToString());
@@ -792,14 +780,7 @@ namespace TCPSwitchConfig
                     }
                 }
                 bytesline++;
-
-            }
-
-
-
-
-
-
+            }            
             return IsDownloadComplete;
         }
 
