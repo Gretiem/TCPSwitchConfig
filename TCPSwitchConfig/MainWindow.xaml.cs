@@ -659,6 +659,206 @@ namespace TCPSwitchConfig
             
         }
 
+        private async void BCSDownloadCorrectIOS(string IpAddress)
+        {
+            bool pingable = false;
+            string strTargetIP = IpAddress;
+
+            string output = "";
+
+
+            await Task.Run(async () =>
+            {
+                pingable = await pingDevice(strTargetIP);
+            });
+
+            if (pingable)
+            {
+                try
+                {
+                    byte[] bytes;
+                    NetworkStream netStream;
+                    TcpClient tcpClient;
+                    Byte[] sendBytes;
+
+                    tcpClient = new TcpClient();
+                    tcpClient.Connect(strTargetIP, intTelnetPort);
+                    netStream = tcpClient.GetStream();
+
+                    Boolean bolDownloadComplete = false;
+                    int intDownloadTimeOut = 0;
+
+                    //string strCmd = "copy flash:cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin flash:bat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin \r\n\r\n";
+                    string strCmd = "copy tftp://192.168.144.253/Public/IOS/cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin flash: \r\n\r\n";
+                    sendBytes = Encoding.UTF8.GetBytes(strCommandLogin + strCmd);
+                    netStream.Write(sendBytes, 0, sendBytes.Length);
+                    bytes = new byte[10000];
+                    
+                    while (!bolDownloadComplete)
+                    {
+                        System.Threading.Thread.Sleep(10000);
+
+                        await Task.Run(async () =>
+                        {
+                            bolDownloadComplete = await BCSGetDownloadStatus(strTargetIP, "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin", 303772864);
+                        });
+                    }
+
+                    if (bolDownloadComplete)
+                    {
+                        tcpClient.Close();
+                        netStream.Close();
+                    }
+                }
+                catch
+                {
+
+                }
+            }
+            else
+            {
+                MessageBox.Show("Connection Failed");
+                output = "Connection Failed";
+            }
+
+
+            tbOutPut.Text = string.Empty;
+            tbOutPut.Text = output;
+        }
+
+        private async Task<bool> BCSGetDownloadStatus(string ipAddress, string fileName, int bytesize)
+        {
+            bool IsDownloadComplete = false;
+
+
+            string strTargetIP = "192.168.144.4";
+            string output = "";
+            string TargetFileName = fileName;
+            int TargetByteSize = bytesize;
+
+
+            await Task.Run(async () =>
+            {
+                output = await SendCommand(strTargetIP, strCheckFile);
+            });
+
+            string[] separators = { " ", "\n", "\r" };
+            //string[] separators = { ",", ".", "!", "?", ";", ":", " " };
+
+            string[] words = output.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+            int bytesline = 0;
+
+
+
+
+
+            foreach (var word in words)
+            {
+                //string x = word.Replace("\n", "");
+                //Console.WriteLine(word);
+
+
+
+                if (word.Contains("cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin"))
+                {
+                    //string strCheckFilePackages = word.Replace(Environment.NewLine, "");
+
+                    //string strCheckFilePackages = word.Replace(Environment.NewLine, "");
+                    string strCheckFilePackages = word;
+                    int intIndexPositionOfBytes = 0;
+
+                    //MessageBox.Show(strCheckFilePackages);
+
+                    if (strCheckFilePackages == TargetFileName)
+                    {
+
+
+                        intIndexPositionOfBytes = bytesline - 6;
+                        int intCurrentFileBytes = Convert.ToInt32(words[intIndexPositionOfBytes]);
+                        //MessageBox.Show(intCurrentFileBytes.ToString());
+                        if (intCurrentFileBytes == TargetByteSize)
+                        {
+                            IsDownloadComplete = true;
+                            MessageBox.Show("file downloaded");
+                        }
+                        else
+                        {
+
+                        }
+                    }
+                    else
+                    {
+                        MessageBox.Show("No Matching File Located"); ;
+                    }
+                }
+                bytesline++;
+
+            }
+
+
+
+
+
+
+            return IsDownloadComplete;
+        }
+
+        private async Task<string> SendCommand(string ipAddress, string command)
+        {
+            bool pingable = false;
+            string strTargetIP = ipAddress;
+            string strCommand = command;
+            string output = "";
+
+
+            await Task.Run(async () =>
+            {
+                pingable = await pingDevice(strTargetIP);
+            });
+
+            if (pingable)
+            {
+                try
+                {
+                    byte[] bytes;
+                    NetworkStream netStream;
+                    TcpClient tcpClient;
+                    Byte[] sendBytes;
+
+                    tcpClient = new TcpClient();
+                    tcpClient.Connect(strTargetIP, intTelnetPort);
+                    netStream = tcpClient.GetStream();
+
+                    //string command = "config t\r\nint fa0/1\r\ndescription Test Port\r\nend\r\nsh int fa0/1 status\r\n";
+
+                    sendBytes = Encoding.UTF8.GetBytes(strCommandLogin + strCommand);
+                    netStream.Write(sendBytes, 0, sendBytes.Length);
+                    bytes = new byte[10000];
+                    System.Threading.Thread.Sleep(2000);
+                    netStream.Read(bytes, 0, 10000);
+                    output = Encoding.UTF8.GetString(bytes);
+                    //MessageBox.Show(Encoding.UTF8.GetString(bytes));
+
+                    tcpClient.Close();
+                    netStream.Close();
+                }
+                catch
+                {
+
+                }
+
+            }
+            else
+            {
+                MessageBox.Show("Connection Failed");
+                output = "Connection Failed";
+            }
+
+
+
+            return output;
+        }
+
         #endregion New BCS Async Code
 
         private async void BCSCheckFile(string IpAddress, string SearchParam)
@@ -896,10 +1096,6 @@ namespace TCPSwitchConfig
             {
                 try
                 {
-
-                   
-
-                    
                     byte[] bytes;
                     NetworkStream netStream;
                     TcpClient tcpClient;
@@ -975,61 +1171,7 @@ namespace TCPSwitchConfig
 
         }
         
-        private async Task<string> SendCommand(string ipAddress, string command)
-        {
-            bool pingable = false;
-            string strTargetIP = ipAddress;
-            string strCommand = command;
-            string output = "";
-
-
-            await Task.Run(async () =>
-            {
-                pingable = await pingDevice(strTargetIP);
-            });
-
-            if (pingable)
-            {
-                try
-                {
-                    byte[] bytes;
-                    NetworkStream netStream;
-                    TcpClient tcpClient;
-                    Byte[] sendBytes;
-
-                    tcpClient = new TcpClient();
-                    tcpClient.Connect(strTargetIP, intTelnetPort);
-                    netStream = tcpClient.GetStream();
-
-                    //string command = "config t\r\nint fa0/1\r\ndescription Test Port\r\nend\r\nsh int fa0/1 status\r\n";
-
-                    sendBytes = Encoding.UTF8.GetBytes(strCommandLogin + strCommand);
-                    netStream.Write(sendBytes, 0, sendBytes.Length);
-                    bytes = new byte[10000];
-                    System.Threading.Thread.Sleep(2000);
-                    netStream.Read(bytes, 0, 10000);
-                    output = Encoding.UTF8.GetString(bytes);
-                    //MessageBox.Show(Encoding.UTF8.GetString(bytes));
-                    
-                    tcpClient.Close();
-                    netStream.Close();
-                }
-                catch
-                {
-
-                }
-
-            }
-            else
-            {
-                MessageBox.Show("Connection Failed");
-                output = "Connection Failed";
-            }
-
-
-
-            return output;
-        }
+        
 
         #endregion End Async
 
