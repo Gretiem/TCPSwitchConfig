@@ -34,6 +34,8 @@ namespace TCPSwitchConfig
 
         public string strCommandLogin = "1234\r\nen\r\n1234\r\nterm len 0\r\n";
         public string strCommandMakeFile = "copy flash:vlan.dat flash:test.dat\r\n\r\n";
+        public string strCommandExpanSwitchIOS = "request platform software package install switch all file flash:cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin new auto-copy\r\n";
+        public string strCommandPurgeFlash = "delete /f /r flash: \r\n\r\n";
         public string strRemoveFile = "delete /f /r flash:test.dat\r\n\r\n";
         public string strCheckFile = "sh flash:\r\n";
         public string strCommandGetSoftwareVersion = "sh ver | i Soft\r\n";
@@ -503,6 +505,7 @@ namespace TCPSwitchConfig
             bool correctIOSInstalled = false;
 
             string strFileName = "";
+            string strSoftwareVersion = "";
             int intFileSize = 0;
 
             if (strModel == "4451")
@@ -517,11 +520,12 @@ namespace TCPSwitchConfig
             else if (strModel == "3650")
             {
                 strFileName = "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin";
+                strSoftwareVersion = "03.06.06E";
                 intFileSize = 303772864;
 
                 await Task.Run(async () =>
                 {
-                    correctIOSInstalled = await IOS3650Switch(strIpAddress);
+                    correctIOSInstalled = await IOS3650Switch(strIpAddress, strSoftwareVersion, strFileName, intFileSize);
                 });
                 //ping - check
                 //check soft first
@@ -542,11 +546,19 @@ namespace TCPSwitchConfig
             
         }
 
-        private async Task<bool> IOS3650Switch(string IpAddress)
+        #region IOS
+
+        private async Task<bool> IOS3650Switch(string IpAddress, string SoftwareVersion, string IOSFileName, int FileSze)
         {
             string strIpAddress = IpAddress;
-            bool pingable = false;
-            bool correctIOSInstalled = false;
+            string strSoftwareVersion = SoftwareVersion;
+            string strIOSFileName = IOSFileName;
+            int intFileSize = FileSze;
+            Boolean pingable = false;
+            Boolean correctIOSInstalled = false;
+            Boolean bolFileAlreadyExists = false;
+            Boolean bolDownloadComplete = false;
+            Boolean tempoutput = false;
             string output = "";
 
             await Task.Run(async () =>
@@ -554,16 +566,16 @@ namespace TCPSwitchConfig
                 pingable = await pingDevice(strIpAddress);
             });
 
-            if(pingable)
-            {                
+            if (pingable)
+            {
                 //Sends switch command to check for current software version
                 await Task.Run(async () =>
                 {
-                    output = await BCSCheckCurrentSwitchFlash(strIpAddress);
+                    output = await BCSCheckCurrentSwitchVersion(strIpAddress);
                 });
 
                 //if loop to check if output from BCSCheckCurrentFlash matches the correct IOS
-                if (output == "03.06.06E")
+                if (output == strSoftwareVersion)
                 {
                     MessageBox.Show("confirmed version match");
                     correctIOSInstalled = true;
@@ -571,10 +583,51 @@ namespace TCPSwitchConfig
                 }
                 else
                 {
-                    //Insert method to redo flash
+                    //Checks to see if file already downloaded to the switch
+                    await Task.Run(async () =>
+                    {
+                        bolFileAlreadyExists = await BCSCheckIfCorrectBinFileAlreadyDownloaded(strIpAddress, strIOSFileName);
+                    });
+
+                    //If file isn't already downloaded to the switch, this will download it.
+                    if (!bolFileAlreadyExists)
+                    {
+                        //add if file doesn't already exist then delete flash
+                        await Task.Run(async () =>
+                        {
+                            string temp = await SendCommand(strIpAddress, strCommandPurgeFlash);
+                        });
+
+                        //will download new flash
+                        await Task.Run(async () =>
+                        {
+                            bolDownloadComplete = await BCSDownloadCorrectIOS(strIpAddress);
+                        });
+                    }
+                    else
+                    {
+                        MessageBox.Show("File already downloaded");
+                    }
+                    
                 }
 
-                MessageBox.Show(output);
+                //To install the flash:
+                if(bolFileAlreadyExists || bolDownloadComplete)
+                {
+                    //verify the flash then install it
+                    MessageBox.Show("now to expand the IOS");
+                    //will have to run it like the download, need to have a loop
+                    await Task.Run(async () =>
+                    {
+                        tempoutput = await BCSExpandFlashFile(strIpAddress);                        
+                    });
+                    MessageBox.Show("Expand was complete:" + tempoutput.ToString());
+                }
+                else
+                {
+                    MessageBox.Show("Expaning of IOS not possible");
+                }
+                
             }
             else
             {
@@ -585,30 +638,7 @@ namespace TCPSwitchConfig
             return correctIOSInstalled;
         }
 
-        private async Task<bool> pingDevice(string ipAddress)
-        {
-            bool pingable = false;
-            Ping ping = new Ping();
-
-            int i = 0;
-            while (!pingable && i <= 5)
-            {
-                try
-                {
-                    PingReply reply = ping.Send(ipAddress);
-                    pingable = reply.Status == IPStatus.Success;
-                }
-                catch
-                {
-
-                }
-                i++;
-            }
-
-            return pingable;
-        }
-
-        private async Task<string> BCSCheckCurrentSwitchFlash(string IpAddress)
+        private async Task<string> BCSCheckCurrentSwitchVersion(string IpAddress)
         {
             string strTargetIP = IpAddress;
             string output = "";
@@ -621,7 +651,7 @@ namespace TCPSwitchConfig
             string[] separators = { " " };
             string[] words = output.Split(separators, StringSplitOptions.RemoveEmptyEntries);
             int bytesline = 0;
-            
+
 
             //IOS Bin for each file
             //sh ver | i soft - get the flash version
@@ -656,13 +686,45 @@ namespace TCPSwitchConfig
 
             }
             return output;
-            
+
         }
 
-        private async void BCSDownloadCorrectIOS(string IpAddress)
+        private async Task<bool> BCSCheckIfCorrectBinFileAlreadyDownloaded(string IpAddress, string IOSFileName)
+        {
+            string strIpAddress = IpAddress;            
+            string strIOSFileName = IOSFileName;
+            Boolean bolFileAlreadyDownloaded = false;
+            string output = "";
+
+            await Task.Run(async () =>
+            {
+                output = await SendCommand(strIpAddress, strCheckFile);
+            });
+
+            string[] separators = { " ", "\n", "\r" };
+            string[] words = output.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+            int bytesline = 0;
+
+            foreach (var word in words)
+            {
+
+                if (word.Contains("cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin"))
+                {
+                    bolFileAlreadyDownloaded = true;
+                    return bolFileAlreadyDownloaded;
+                }
+                bytesline++;
+
+            }
+            return bolFileAlreadyDownloaded;
+
+        }
+
+        private async Task<bool> BCSDownloadCorrectIOS(string IpAddress)
         {
             bool pingable = false;
             string strTargetIP = IpAddress;
+            Boolean bolDownloadComplete = false;
 
             string output = "";
 
@@ -685,7 +747,7 @@ namespace TCPSwitchConfig
                     tcpClient.Connect(strTargetIP, intTelnetPort);
                     netStream = tcpClient.GetStream();
 
-                    Boolean bolDownloadComplete = false;
+                    
                     int intDownloadTimeOut = 0;
 
                     //string strCmd = "copy flash:cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin flash:bat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin \r\n\r\n";
@@ -693,7 +755,7 @@ namespace TCPSwitchConfig
                     sendBytes = Encoding.UTF8.GetBytes(strCommandLogin + strCmd);
                     netStream.Write(sendBytes, 0, sendBytes.Length);
                     bytes = new byte[10000];
-                    
+
                     while (!bolDownloadComplete)
                     {
                         System.Threading.Thread.Sleep(10000);
@@ -722,16 +784,13 @@ namespace TCPSwitchConfig
             }
 
 
-            tbOutPut.Text = string.Empty;
-            tbOutPut.Text = output;
+            return bolDownloadComplete;
         }
 
-        private async Task<bool> BCSGetDownloadStatus(string ipAddress, string fileName, int bytesize)
+        private async Task<bool> BCSGetDownloadStatus(string IpAddress, string fileName, int bytesize)
         {
             bool IsDownloadComplete = false;
-
-
-            string strTargetIP = "192.168.144.4";
+            string strTargetIP = IpAddress;
             string output = "";
             string TargetFileName = fileName;
             int TargetByteSize = bytesize;
@@ -752,9 +811,9 @@ namespace TCPSwitchConfig
 
 
             foreach (var word in words)
-            {                
+            {
                 if (word.Contains("cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin"))
-                {                    
+                {
                     string strCheckFilePackages = word;
                     int intIndexPositionOfBytes = 0;
                     //MessageBox.Show(strCheckFilePackages);
@@ -780,8 +839,155 @@ namespace TCPSwitchConfig
                     }
                 }
                 bytesline++;
-            }            
+            }
             return IsDownloadComplete;
+        }
+
+        private async Task<bool> BCSExpandFlashFile(string IpAddress)
+        {
+            string strTargetIP = IpAddress;
+            bool bolExpandFileComplete = false;
+
+            try
+            {
+                byte[] bytes;
+                NetworkStream netStream;
+                TcpClient tcpClient;
+                Byte[] sendBytes;
+
+                tcpClient = new TcpClient();
+                tcpClient.Connect(strTargetIP, intTelnetPort);
+                netStream = tcpClient.GetStream();
+                int intExpandTimeOut = 0;
+
+                //string strCmd = "copy flash:cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin flash:bat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin \r\n\r\n";
+                string strCmd = "request platform software package install switch all file flash:cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin new auto-copy\r\n";
+                sendBytes = Encoding.UTF8.GetBytes(strCommandLogin + strCmd);
+                netStream.Write(sendBytes, 0, sendBytes.Length);
+                bytes = new byte[10000];
+
+                while (!bolExpandFileComplete)
+                {
+                    if (!bolExpandFileComplete && intExpandTimeOut <= 20)
+                    {
+                        System.Threading.Thread.Sleep(10000);
+
+                        await Task.Run(async () =>
+                        {
+                            bolExpandFileComplete = await BCSExpandFlashFileStatus(strTargetIP);
+                        });
+                    }
+                    else
+                    {
+                        MessageBox.Show("should do a break here");
+                        break;
+                    }
+                    intExpandTimeOut++;
+                }
+
+                if (bolExpandFileComplete)
+                {
+                    tcpClient.Close();
+                    netStream.Close();
+                    return bolExpandFileComplete;
+                }
+                else
+                {
+                    tcpClient.Close();
+                    netStream.Close();
+                    MessageBox.Show("timed out on expan file");
+                }
+            }
+            catch
+            {
+
+            }
+            return bolExpandFileComplete;
+        }
+
+        private async Task<bool> BCSExpandFlashFileStatus(string IpAddress)
+        {
+            bool IsExpandComplete = false;
+            bool bolFoundLockFile = false;
+            bool bolFoundPackagesConf = false;
+            string strTargetIP = IpAddress;
+            string output = "";
+
+
+            await Task.Run(async () =>
+            {
+                output = await SendCommand(strTargetIP, strCheckFile);
+            });
+
+            string[] separators = { " ", "\n", "\r" };
+
+            string[] words = output.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+
+            try
+            {
+                foreach (var word in words)
+                {
+                    if (word.Contains(".install_loc_lock"))
+                    {
+                        
+                        bolFoundLockFile = true;
+                    }
+                    else if(word.Contains("packages.conf"))
+                    {
+                        bolFoundPackagesConf = true;
+                    }
+                    else
+                    {
+
+                    }
+                }
+                
+            }
+            catch 
+            {
+
+            }
+
+            if (bolFoundLockFile && bolFoundPackagesConf)
+            {
+                MessageBox.Show("still expanding");
+                IsExpandComplete = false;
+            }
+            else if (!bolFoundLockFile && bolFoundPackagesConf)
+            {
+                IsExpandComplete = true;
+            }
+            else
+            {
+                IsExpandComplete = false;
+            }
+            
+            return IsExpandComplete;
+        }
+
+        #endregion IOS
+
+        private async Task<bool> pingDevice(string ipAddress)
+        {
+            bool pingable = false;
+            Ping ping = new Ping();
+
+            int i = 0;
+            while (!pingable && i <= 5)
+            {
+                try
+                {
+                    PingReply reply = ping.Send(ipAddress);
+                    pingable = reply.Status == IPStatus.Success;
+                }
+                catch
+                {
+
+                }
+                i++;
+            }
+
+            return pingable;
         }
 
         private async Task<string> SendCommand(string ipAddress, string command)
