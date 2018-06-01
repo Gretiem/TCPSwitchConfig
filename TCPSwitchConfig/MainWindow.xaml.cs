@@ -106,9 +106,15 @@ namespace TCPSwitchConfig
         private void btnBCSConfigTest_Click(object sender, RoutedEventArgs e)
         {
             //DownloadCorrectIOS("192.168.144.4");
+
+
             ConfigureDevice("192.168.144.4", "3650", "s-upc-3.s05428.us");
-            ConfigureDevice("192.168.144.5", "3650", "s-upc-3.s05880.us");
-            ConfigureDevice("192.168.144.6", "3650", "s-upc-3.s03538.us");
+
+            //ConfigureDevice("192.168.144.5", "3650", "s-upc-3.s00404.us");
+
+            //ConfigureDevice("192.168.144.6", "3650", "s-upc-3.s03538.us");
+
+
             //ConfigureDevice(tbBCSIpAddress.Text, "3650", "s-upc-3.s02020.us");
             //ConfigureDevice("192.168.144.5", "3650", "s-upc-3.s02020.us");
             //ConfigureDevice("192.168.144.6", "3650", "s-upc-3.s02020.us");
@@ -774,6 +780,42 @@ namespace TCPSwitchConfig
 
                     while (!bolDownloadComplete)
                     {
+                        if (!bolDownloadComplete && intDownloadTimeOut <= 20)
+                        {
+                            System.Threading.Thread.Sleep(10000);
+
+                            await Task.Run(async () =>
+                            {
+                                bolDownloadComplete = await BCSGetDownloadStatus(strTargetIP, "cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin", 303772864);
+                            });
+                        }
+                        else
+                        {
+                            MessageBox.Show("Expand file process has exceeded allowed time.");
+                            break;
+                        }
+                        intDownloadTimeOut++;
+                    }
+
+                    if (bolDownloadComplete)
+                    {
+                        tcpClient.Close();
+                        netStream.Close();
+                        return bolDownloadComplete;
+                    }
+                    else
+                    {
+                        tcpClient.Close();
+                        netStream.Close();
+                        //MessageBox.Show("timed out on expan file");
+                    }
+
+
+
+                    //old working code
+                    /*
+                    while (!bolDownloadComplete)
+                    {
                         
                         System.Threading.Thread.Sleep(10000);
 
@@ -790,7 +832,7 @@ namespace TCPSwitchConfig
                         tcpClient.Close();
                         netStream.Close();
                     }
-                    
+                    */
                 }
                 catch
                 {
@@ -1010,7 +1052,15 @@ namespace TCPSwitchConfig
                 {
                     string tempoutput1 = await SendCommand(strIpAddress, "config t\r\nip tftp blocksize 8192\r\nend\r\nlicense right-to-use activate ipservices all acceptEULA\r\nconfig t\r\nno boot system\r\nboot system switch all flash:packages.conf\r\nend\r\nwr\r\n");
                 });
-                
+
+
+                await Task.Run(async () =>
+                {
+                    bolCorrectConfigInstalled = await BCSApplyStartupConfig(strIpAddress, strRunningConfig);
+                });
+
+
+                /*
                 await Task.Run(async () =>
                 {
                     string tempoutput2 = await SendCommand(strIpAddress, "copy tftp://192.168.144.253/Public/Config/" + strRunningConfig + " startup-config\r\n\r\n");
@@ -1037,7 +1087,7 @@ namespace TCPSwitchConfig
                     }
                     bytesline++;
                 }
-
+                */
             }
             else
             {
@@ -1048,6 +1098,115 @@ namespace TCPSwitchConfig
 
             // Will tell parent method if true or false
             return bolCorrectConfigInstalled;
+        }
+
+        private async Task<bool> BCSApplyStartupConfig(string IpAddress, string RunningConfig)
+        {
+            string strTargetIP = IpAddress;
+            string strRunningConfig = RunningConfig;
+            bool bolApplyStartupConfigComplete = false;
+
+            try
+            {
+                byte[] bytes;
+                NetworkStream netStream;
+                TcpClient tcpClient;
+                Byte[] sendBytes;
+
+                tcpClient = new TcpClient();
+                tcpClient.Connect(strTargetIP, intTelnetPort);
+                netStream = tcpClient.GetStream();
+                int intTimeOut = 0;
+
+                //string strCmd = "copy flash:cat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin flash:bat3k_caa-universalk9.SPA.03.06.06.E.152-2.E6.bin \r\n\r\n";
+                string strCmd = "copy tftp://192.168.144.253/Public/Config/" + strRunningConfig + " startup-config\r\n\r\n";
+                sendBytes = Encoding.UTF8.GetBytes(strCommandLogin + strCmd);
+                netStream.Write(sendBytes, 0, sendBytes.Length);
+                bytes = new byte[10000];
+
+                while (!bolApplyStartupConfigComplete)
+                {
+                    if (!bolApplyStartupConfigComplete && intTimeOut <= 10)
+                    {
+                        System.Threading.Thread.Sleep(10000);
+
+                        await Task.Run(async () =>
+                        {
+                            bolApplyStartupConfigComplete = await BCSApplyStartupConfigStatus(strTargetIP, strRunningConfig);
+                        });
+                    }
+                    else
+                    {
+                        MessageBox.Show("Application of Startup config process has exceeded allowed time.");
+                        break;
+                    }
+                    intTimeOut++;
+                }
+
+                if (bolApplyStartupConfigComplete)
+                {
+                    tcpClient.Close();
+                    netStream.Close();
+                    return bolApplyStartupConfigComplete;
+                }
+                else
+                {
+                    tcpClient.Close();
+                    netStream.Close();
+                    //MessageBox.Show("timed out on expan file");
+                }
+            }
+            catch
+            {
+
+            }
+            return bolApplyStartupConfigComplete;
+        }
+
+        private async Task<bool> BCSApplyStartupConfigStatus(string IpAddress, string RunningConfig)
+        {            
+            string strTargetIP = IpAddress;
+            string strRunningConfig = RunningConfig;
+            bool bolApplyStartupConfigComplete = false;
+            int intParseIndexCounter = 0;
+            string output = "";
+
+
+            await Task.Run(async () =>
+            {
+                output = await SendCommand(strTargetIP, "sh start | i hostname\r\n");
+            });
+
+            string[] separators = { " ", "\n", "\r" };
+
+            string[] words = output.Split(separators, StringSplitOptions.RemoveEmptyEntries);
+
+            try
+            {
+                foreach (var word in words)
+                {
+                    if (word.Contains(strRunningConfig))
+                    {
+                        bolApplyStartupConfigComplete = true;
+                        return bolApplyStartupConfigComplete;
+                        /*
+                        if (words[intParseIndexCounter] + 1 == "copied")
+                        {
+                            bolApplyStartupConfigComplete = true;
+                            return bolApplyStartupConfigComplete;
+                        }
+                        */  
+                    }                    
+                    intParseIndexCounter++;
+                }
+
+            }
+            catch
+            {
+
+            }
+
+            return bolApplyStartupConfigComplete;
         }
 
         #endregion ApplyStoreConfig
